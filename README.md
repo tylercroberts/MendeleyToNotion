@@ -7,7 +7,12 @@
 </div>
 
 ## Description 
-This project allows you to export newly added or recently updated documents in Mendeley to your Notion database via the APIs provided by the two. If you'd like the export to happen as soon as you make a change in Mendeley, then you can run the script `scripts/runMendToNotion.sh` peridocially at a reasonable frequency via a `crontab` job.
+This is an updated fork of `nanbhas`'s MendeleyToNotion project. It contains some changes I needed to make in order
+to get it working in my environment. Huge thanks to [@nanbhas](https://stanford.edu/~nanbhas/) for creating the original library.
+
+This project allows you to export newly added or recently updated documents in Mendeley to your Notion database via the
+APIs provided by the two. If you'd like the export to happen as soon as you make a change in Mendeley, 
+then you can run the script `scripts/runMendToNotion.sh` peridocially at a reasonable frequency via a `crontab` job.
 
 ## Directory Structure
 
@@ -47,9 +52,6 @@ This project allows you to export newly added or recently updated documents in M
 ![MendeleyToNotionScreenshot](docs/MendeleyToNotion_screenshot.png)
 ---
 
-## Update
-This hasn't been tested out after Mendeley's Sept 1, 2022 changes. It is not clear how long the API will remain available for easy access to Mendeley data.
-
 ## Usage
 1. Register an app on Mendeley's developer portal (follow instructions [online](https://dev.mendeley.com/))
 2. Obtain its `clientID`, `clientSecret` and `redirectURL` and add it to `secrets/secrets_mendeley.json` in the following format:
@@ -78,6 +80,7 @@ Date properties: Created At, Last Modified At
 ```
 7. Run the python script `src/mendeleyToNotion.py` with `--secretsFilePath` argument as `secrets/secrets_mendeley.py`.
 8. Authenticate your Mendeley app by logging in. It will automatically generate a token and add it to your `secrets/secrets_mendeley.py`.
+    - Note that this currently requires you to manually copy/paste the redirect URL if using environment variables for your client secrets
 9. Currently, the logic reads all items from the Mendeley API as an Mendeley Object iterator and reads all items in the Notion database. For each item in Mendeley, we check if it already exists in Notion. If yes, we check if the last modified time on Mendeley is AFTER the last edited time in Notion. If yes, we update the Notion entry. If not, there's nothing to update. If the Mendeley item doesn't exist in Notion, we create a brand new row in Notion. 
 10. You can periodically run this file again as a script `scripts/runMendToNotion.sh` using a crontab job to get periodic updates. For more information on Crontab, check out this [reference](https://crontab.guru/).
 
