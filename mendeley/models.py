@@ -1,5 +1,5 @@
 import arrow
 
-from mendeley.response import ResponseObject
+from .response import ResponseObject
 
 

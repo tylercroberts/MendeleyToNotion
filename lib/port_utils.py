@@ -13,9 +13,14 @@ import arrow
 import json
 
 from tqdm import tqdm
-
+from loguru import logger
 from mendeley import Mendeley
 from mendeley.session import MendeleySession
+from typing import List, Dict, Any
+
+def sleep_util(sleep_time: int=30):
+    logger.debug(f"Sleeping {sleep_time}s to avoid rate-limit")
+    time.sleep(sleep_time)
 
 
 def startInteractiveMendeleyAuthorization(mendeley, secretsFilePath = None):
@@ -31,11 +36,16 @@ def startInteractiveMendeleyAuthorization(mendeley, secretsFilePath = None):
     '''
     auth = mendeley.start_authorization_code_flow()
     state = auth.state
-    auth = mendeley.start_authorization_code_flow( state = state )
+    auth = mendeley.start_authorization_code_flow(state=state)
+    # printing here because otherwise the URL was too long and caused an error.
     print(auth.get_login_url())
 
     # After logging in, the user will be redirected to a URL, auth_response.
-    session = auth.authenticate( input() )
+    # You need to paste the URL in the console to get it to proceed.
+    # There _must_ be a way to get this from auth
+    # The problem is that we need a second request, where we click the 'accept' button.
+
+    session = auth.authenticate(input("Please paste the redirect URL here:"))
 
     if secretsFilePath:
         assert secretsFilePath.endswith('.json'), "secretsFilePath should be a json file"
@@ -51,10 +61,11 @@ def startInteractiveMendeleyAuthorization(mendeley, secretsFilePath = None):
         with open(secretsFilePath, "w") as f:
             json.dump(secrets, f)
     else:
-        print(session.token)
+        return session.token
 
 
-def getPropertiesForMendeleyDoc(docObj, localPrefix = 'file:///C:/Users/Nandita%20Bhaskhar/Documents/5_Others/1_GoogleDrive/Literature%20Review/'):
+def getPropertiesForMendeleyDoc(docObj,
+                                localPrefix = 'file:///C:/Users/Tyler/Documents/Mendeley%20Desktop') -> Dict[str, Any]:
     '''
     Gets all properties of a document object in Mendeley as a dict
     Args:
@@ -67,7 +78,7 @@ def getPropertiesForMendeleyDoc(docObj, localPrefix = 'file:///C:/Users/Nandita%
     
     prop = {}
 
-    prop['Citation'] = str(docObj.authors[0].last_name) + str(docObj.year)
+    prop['Citation'] = f"{str(docObj.authors[0].last_name)} {str(docObj.year)}"
     prop['Title'] = str(docObj.title)
     prop['UID'] = str(docObj.id)
     
@@ -89,7 +100,7 @@ def getPropertiesForMendeleyDoc(docObj, localPrefix = 'file:///C:/Users/Nandita%
     if len(docObj.authors) > 3:
         fileName = str(docObj.authors[0].last_name) + ' et al.' + '_' + prop['Year'] + '_' + prop['Title'].replace(':','') + '.pdf'
         prop['Filename'] = fileName
-        prop['Filepath'] = localPrefix + fileName
+        prop['Filepath'] = localPrefix + fileName.replace(" ", "%20")
         
     else:
         fileName = ', '.join([str(author.last_name) for author in docObj.authors])
@@ -140,6 +151,9 @@ def getNotionPageEntryFromPropObj(propObj):
 def getAllRowsFromNotionDatabase(notion, notionDB_id):
     '''
     Gets all rows (pages) from a notion database using a notion client
+    # TODO: Currently if there are _any_ errors, it waits 30s before failing.
+    # TODO: Could make the try-excepts a bit more specific to enable fast-failing
+
     Args:
         notion: (notion Client) Notion client object
         notionDB_id: (str) string code id for the relevant database
@@ -162,8 +176,7 @@ def getAllRowsFromNotionDatabase(notion, notionDB_id):
                                 }
                             )
             except:
-                print('Sleeping to avoid rate limit')
-                time.sleep(30)
+                sleep_util(30)
                 query = notion.databases.query(
                                 **{
                                     "database_id": notionDB_id,
@@ -181,8 +194,7 @@ def getAllRowsFromNotionDatabase(notion, notionDB_id):
                                 }
                             )
             except:
-                print('Sleeping to avoid rate limit')
-                time.sleep(30)
+                sleep_util(30)
                 query = notion.databases.query(
                                 **{
                                     "database_id": notionDB_id,
@@ -197,29 +209,28 @@ def getAllRowsFromNotionDatabase(notion, notionDB_id):
         i+=1
 
     end = time.time()
-    print('Number of rows in notion currently: ' + str(len(allNotionRows)))
-    print('Total time taken: ' + str(end-start))
+    logger.info('Number of rows in notion currently: ' + str(len(allNotionRows)))
+    logger.info('Total time taken: ' + str(end-start))
 
     return allNotionRows
 
 
-def portMendeleyDocsToNotion(obj, notion, notionDB_id, noneAuthors = []):
+def portMendeleyDocsToNotion(obj, notion, notionDB_id: str,
+                             mendeley_filepath: str,
+                             noneAuthors: List[Dict[str, Any]] = []) -> List[Dict[str, Any]]:
     '''
     Port all objs from Mendeley to Notion
     Args:
         obj: (mendeley obj iter) iterator e.g. documents.iter() 
         notion: (notion Client) Notion client object
         notionDB_id: (str) string code id for the relevant database
-        noneAuthors: (list of mendeley UserDocuments obj) entries for which author list is empty
+        noneAuthors: (list of mendeley UserDocuments dictionaries) entries for which author list is empty
     Returns:
-        noneAuthors: (list of mendeley UserDocuments obj) entries for which author list is empty
+        noneAuthors: (list of mendeley UserDocuments dictionaries) entries for which author list is empty
     '''
     allNotionRows = getAllRowsFromNotionDatabase(notion, notionDB_id)
 
     for i, it in enumerate(tqdm(obj.iter())):
-
-        #print(i, it.title)
-        
         if it.authors is not None:
 
             # check if its ID is in notion
@@ -231,40 +242,34 @@ def portMendeleyDocsToNotion(obj, notion, notionDB_id, noneAuthors = []):
             
             if numMatches == 1:
 
-                #print('----1 result matched query')
                 notionRow = notionRow[0]
-
                 mendeleyTime = it.last_modified.to('US/Pacific')
                 notionTime = arrow.get(notionRow['last_edited_time']).to('US/Pacific')
 
                 # last modified time on Mendeley is AFTER last edited time on Notion
                 if mendeleyTime > notionTime:
-                    print('--------Updating row in notion')
+                    logger.debug(f'Updating row {notionRow["id"]} in notion')
                     pageID = notionRow['id']
-                    propObj = getPropertiesForMendeleyDoc(it)
+                    propObj = getPropertiesForMendeleyDoc(it, localPrefix=mendeley_filepath)
                     notionPage = getNotionPageEntryFromPropObj(propObj)
                     try:
                         notion.pages.update( pageID, properties = notionPage)
                     except:
-                        print('Sleeping to avoid rate limit')
-                        time.sleep(30)
+                        sleep_util(30)
                         notion.pages.update( pageID, properties = notionPage)
 
-                else:
-                    #print('--------Nothing to update')
+                else: # Nothing to update
                     pass
 
             elif numMatches == 0:
-
-                print('----No results matched query. Creating new row')
+                logger.debug(f'No results matched query for {it.title} - {it.id}. Creating new row')
                 # extract properties and format it well
                 propObj = getPropertiesForMendeleyDoc(it)
                 notionPage = getNotionPageEntryFromPropObj(propObj)
                 try:
                     notion.pages.create(parent={"database_id": notionDB_id}, properties = notionPage)
-                except:
-                    print('Sleeping to avoid rate limit')
-                    time.sleep(30)
+                except: #TODO: See note above about this sleeping on _any_ error.
+                    sleep_util(30)
                     notion.pages.create(parent={"database_id": notionDB_id}, properties = notionPage)
 
             else:

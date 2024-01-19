@@ -4,9 +4,9 @@ from future.moves.urllib.parse import urljoin
 from oauthlib.oauth2 import TokenExpiredError
 from requests_oauthlib import OAuth2Session
 
-from mendeley.exception import MendeleyApiException
-from mendeley.resources import *
-from mendeley.version import __version__
+from .exception import MendeleyApiException
+from .resources import *
+from .version import __version__
 
 
 class MendeleySession(OAuth2Session):

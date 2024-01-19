@@ -5,7 +5,7 @@ from requests.auth import HTTPBasicAuth
 from requests_oauthlib import OAuth2Session
 from future.builtins import bytes
 
-from mendeley.session import MendeleySession
+from .session import MendeleySession
 
 
 def handle_text_response(rsp):

@@ -1,9 +1,0 @@
-arrow
-future==0.14.3
-jupyterlab
-jupytext
-memoized-property
-notion-client
-oauthlib
-requests-oauthlib
-tqdm
