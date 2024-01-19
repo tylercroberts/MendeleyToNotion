@@ -65,7 +65,7 @@ def startInteractiveMendeleyAuthorization(mendeley, secretsFilePath = None):
 
 
 def getPropertiesForMendeleyDoc(docObj,
-                                localPrefix = 'file:///C:/Users/Tyler/Documents/Mendeley%20Desktop') -> Dict[str, Any]:
+                                localPrefix = 'file:///C:/Users/Tyler/Documents/Mendeley%20Desktop/') -> Dict[str, Any]:
     '''
     Gets all properties of a document object in Mendeley as a dict
     Args:
@@ -77,7 +77,6 @@ def getPropertiesForMendeleyDoc(docObj,
     '''
     
     prop = {}
-
     prop['Citation'] = f"{str(docObj.authors[0].last_name)} {str(docObj.year)}"
     prop['Title'] = str(docObj.title)
     prop['UID'] = str(docObj.id)
@@ -96,17 +95,27 @@ def getPropertiesForMendeleyDoc(docObj,
     prop['Year'] = str(docObj.year)
     prop['Type'] = str(docObj.type)
     prop['Venue'] = str(docObj.source)
-    
+
+    # In order for this to make sense, ensure your Mendeley Desktop is set to rename files to the same format as here.
+    # Go to: Tools -> Options -> File Organizer.
+    # Check 'Rename Document files" and ensure that you have it set to hyphen separated and use the following fields:
+    # Author Year Title
+
+    #TODO: Should also check here that there is a relevant file. Otherwise, this is a link to nothing which can make it hard to debug.
+    fileNameTemplate = "{} - {} - {}.pdf"
     if len(docObj.authors) > 3:
-        fileName = str(docObj.authors[0].last_name) + ' et al.' + '_' + prop['Year'] + '_' + prop['Title'].replace(':','') + '.pdf'
-        prop['Filename'] = fileName
-        prop['Filepath'] = localPrefix + fileName.replace(" ", "%20")
-        
+        author_file_portion = str(docObj.authors[0].last_name) + ' et al.'
     else:
-        fileName = ', '.join([str(author.last_name) for author in docObj.authors])
-        fileName = fileName + '_' + prop['Year'] + '_' + prop['Title'].replace(':','') + '.pdf'
-        prop['Filename'] = fileName
-        prop['Filepath'] = localPrefix + fileName
+        """Should never lead to a null reference since NoAuthor is handled separately I think."""
+        author_file_portion = ', '.join([str(author.last_name) for author in docObj.authors])
+
+    fileName = fileNameTemplate.format(author_file_portion,
+                                prop['Year'],
+                                prop['Title'].replace(':', ''))
+    prop['Filename'] = fileName
+    prop['Filepath'] = localPrefix + fileName.replace(" ", "%20")
+
+
         
     bibtex = '@article{' + prop['Citation'] + ', \n' + \
             'author = {' + ' and '.join([str(author.last_name) + ', ' + str(author.first_name) for author in docObj.authors]) + '}, \n' + \
@@ -264,7 +273,7 @@ def portMendeleyDocsToNotion(obj, notion, notionDB_id: str,
             elif numMatches == 0:
                 logger.debug(f'No results matched query for {it.title} - {it.id}. Creating new row')
                 # extract properties and format it well
-                propObj = getPropertiesForMendeleyDoc(it)
+                propObj = getPropertiesForMendeleyDoc(it, localPrefix=mendeley_filepath)
                 notionPage = getNotionPageEntryFromPropObj(propObj)
                 try:
                     notion.pages.create(parent={"database_id": notionDB_id}, properties = notionPage)
